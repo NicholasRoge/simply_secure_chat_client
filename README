@@ -1,4 +1,7 @@
-simply_secure_chat_client
-=========================
+This project is meant for educational purposes.  It is completely free to use, modify, and redistribute as long as this readme file remains intact.
 
-An attempt at making a secure chat client.
+Project information:
+	Title:  Simply Secure Chat Client
+	Developer:  Nicholas Rogé
+	Purpose:
+		This project is meant to provide those who need it with a one-time use chat client that will enable two people to remotely connect and communicate with each other with a secure connection.
