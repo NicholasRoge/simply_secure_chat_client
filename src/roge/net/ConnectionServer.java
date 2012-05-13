@@ -10,10 +10,12 @@ import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.List;
 
+import roge.net.DataRecievedSubject.DataReceivedListener;
+
 /**
  * @author Nicholas Rogé
  */
-public class ConnectionServer extends DataRecievedSubject{    
+public class ConnectionServer implements DataReceivedListener{    
     private List<ConnectionClient> __clients;
     private BufferedReader         __input;
     private PrintWriter            __output;
@@ -51,10 +53,16 @@ public class ConnectionServer extends DataRecievedSubject{
     
     protected void _startServer(){                
         this.__new_connection_listener=new Thread(){
-            @Override public void run(){                
+            @Override public void run(){
+                ConnectionClient client=null;
+                
                 try{
                     while(true){
-                        ConnectionServer.this.getClientList().add(new ConnectionClient(ConnectionServer.this.__socket.accept()));
+                        System.out.print("Listening for incoming connection.\n");
+                        client=new ConnectionClient(ConnectionServer.this.__socket.accept());
+                        client.addDataRecievedListener(ConnectionServer.this);
+                        ConnectionServer.this.getClientList().add(client);
+                        System.out.print("Client connected.\n");
                     }
                 }catch(IOException e){
                     //TODO_HIGH:  Make a handler for this exception here
@@ -63,5 +71,11 @@ public class ConnectionServer extends DataRecievedSubject{
         };
         this.__new_connection_listener.start();
     }
+
+    @Override public void receiveData(String data){
+        System.out.print(data+"\n");
+    }
+    
+    
     /*End Other Essential Methods*/
 }

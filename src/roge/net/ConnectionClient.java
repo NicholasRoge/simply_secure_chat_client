@@ -22,9 +22,16 @@ public class ConnectionClient extends DataRecievedSubject{
     /**
      * 
      * 
-     * @param socket
+     * @param socket Socket to use as the base for this Class
+     * 
+     * @throws IllegalArgumentException Thrown if the socket parameter is null.
      */
     public ConnectionClient(Socket socket){
+        if(socket==null){
+            throw new IllegalArgumentException();
+        }
+        
+        
         this.__socket=socket;
         
         this.__host_address=this.__socket.getInetAddress().getHostAddress();
@@ -64,12 +71,24 @@ public class ConnectionClient extends DataRecievedSubject{
         }
     }
     
+    public void disconnect(){
+        try{
+            this.__message_listener.interrupt();
+            this.__input.close();
+            this.__output.close();
+            this.__socket.close();
+        }catch(Exception e){
+            
+        }
+    }
+    
     public void send(String data) throws IOException{
         if(this.__socket==null){
             throw new IOException("You must initialize the connection before you can send anything.");
         }
-        
+
         this.__output.write(data);
+        this.__output.flush();
     }
     
     protected void _startMessageListener(){
@@ -77,10 +96,11 @@ public class ConnectionClient extends DataRecievedSubject{
             @Override public void run(){
                 String data=null;
                 
-                
                 while(true){
                     try{
+                        System.out.print("Listening for data.\n");
                         data=ConnectionClient.this.__input.readLine();
+                        System.out.print("Broadcasting data.\n");
                         if(data==null){
                             break;
                         }else{
@@ -88,6 +108,8 @@ public class ConnectionClient extends DataRecievedSubject{
                         }
                     }catch(IOException e){
                         System.out.print("IOException caught!  Message:  "+e.getMessage());
+                        
+                        break;
                     }
                 }
             }
