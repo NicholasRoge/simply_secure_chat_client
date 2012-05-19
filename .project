@@ -3,6 +3,8 @@
 	<name>Simply Secure Chat Client</name>
 	<comment></comment>
 	<projects>
+		<project>rguilibrary</project>
+		<project>rnetlibrary</project>
 	</projects>
 	<buildSpec>
 		<buildCommand>
