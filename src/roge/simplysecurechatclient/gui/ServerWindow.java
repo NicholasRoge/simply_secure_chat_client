@@ -15,7 +15,7 @@ import roge.net.ConnectionServer;
 import roge.net.ConnectionServer.ClientConnectListener;
 import roge.net.ConnectionServer.ClientDisconnectListener;
 import roge.net.Signal;
-import roge.simplysecurechatclient.gui.ServerWindow.Signals.ChatMessage;
+import roge.simplysecurechatclient.gui.ChatPanel.Signals.ChatMessage;
 import roge.simplysecurechatclient.resources.Resources;
 
 /**
@@ -25,30 +25,7 @@ import roge.simplysecurechatclient.resources.Resources;
 public class ServerWindow implements ClientConnectListener,DataReceivedListener,ClientDisconnectListener,SignalReceivedListener{
     public static final String CLIENT_DISCONNECTED="client_disconnected";
     /**List of Signals present in this class.*/
-    public static class Signals{
-        /**Signal to send a chat message between sessions.*/
-        public static class ChatMessage extends Signal{
-            private static final long serialVersionUID = 4302065424064019563L;
-            
-            public long server_timestamp=0;
-
-            
-            /*Begin Constructors*/
-            /**
-             * Constructs the signal to send a message between chat sessions.
-             * 
-             * @param message Chat message.
-             */
-            public ChatMessage(String message){
-                super(message);
-                
-                if(message==null){
-                    throw new NullPointerException();
-                }
-            }
-            /*End Constructors*/
-        }
-        
+    public static class Signals{        
         /**Response signal containing the host key.*/
         public static class HostKeyResponse extends Signal{
             private static final long serialVersionUID = 2610575189906570480L;
@@ -215,10 +192,11 @@ public class ServerWindow implements ClientConnectListener,DataReceivedListener,
                     e.printStackTrace();
                 }
             }
-        }else if(signal instanceof ServerWindow.Signals.ChatMessage){
+        }else if(signal instanceof ChatMessage){
             if(this.getHosts().containsKey(client)||this.getClients().containsKey(client)){
                 try{
-                    this._processChatMessage((ServerWindow.Signals.ChatMessage)signal);
+                    System.out.print("Receieved message from "+((ChatMessage)signal).getSender()+"\n");
+                    this._processChatMessage((ChatMessage)signal);
                     
                     client.send(signal);
                     this.getBrotherSession(client).send(signal);
@@ -270,7 +248,7 @@ public class ServerWindow implements ClientConnectListener,DataReceivedListener,
     }
     
     protected void _processChatMessage(ChatMessage signal){
-        signal.server_timestamp=System.currentTimeMillis();
+        signal.setServerTimestamp(System.currentTimeMillis());
         
         //May add more here later.
     }

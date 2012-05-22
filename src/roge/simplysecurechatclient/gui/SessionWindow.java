@@ -26,7 +26,7 @@ import roge.net.ConnectionClient;
 import roge.net.ConnectionClient.DataReceivedListener;
 import roge.net.ConnectionClient.SignalReceivedListener;
 import roge.net.Signal;
-import roge.simplysecurechatclient.gui.ServerWindow.Signals.ChatMessage;
+import roge.simplysecurechatclient.gui.ChatPanel.Signals.ChatMessage;
 import roge.simplysecurechatclient.resources.Resources;
 
 /**
@@ -126,7 +126,11 @@ public class SessionWindow extends RWindow implements DataReceivedListener,Signa
     /*Begin Getter Methods*/
     public ChatPanel getChatPanel(){
         if(this.__chat_panel==null){
-            this.__chat_panel=new ChatPanel();  
+            if(this.__is_host){
+                this.__chat_panel=new ChatPanel("Host");
+            }else{
+                this.__chat_panel=new ChatPanel("Client");
+            }
         }
         
         return this.__chat_panel;
@@ -292,8 +296,11 @@ public class SessionWindow extends RWindow implements DataReceivedListener,Signa
                         Thread.sleep(100);  //TODO_HIGH:  Look into why this changes this loop.  Without the sleep, the retrieval always seems to timeout, even when the host_key clearly arrives.
                     }
                     
-                    SessionWindow.this._changeState(SessionState.AWAITING_CONNECTION);
+                    SessionWindow.this.__is_host=true;
+                    
                     host_key_display.setText(SessionWindow.this.__host_key);//Recall that if it gets to this point, no exceptions were thrown and a host key was retrieved successfully
+                    
+                    SessionWindow.this._changeState(SessionState.AWAITING_CONNECTION);
                 }catch(InterruptedException e){
                     e.printStackTrace();
                 }catch(IOException e){                    
@@ -337,6 +344,7 @@ public class SessionWindow extends RWindow implements DataReceivedListener,Signa
                         
                         server.send(new ServerWindow.Signals.CreateSessionConnection(key.getText()));
                         
+                        SessionWindow.this.__is_host=false;
                         SessionWindow.this._changeState(SessionState.AWAITING_CONNECTION);
                     }catch(IOException e1){
                         e1.printStackTrace();
