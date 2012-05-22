@@ -20,7 +20,10 @@ public final class Resources{
         public static final String host_key_retrieval_failed="Could not retrieve the host key.  Cause:<br />%s";
         public static final String host_key_timeout_exceeded="Timeout for key retrieval exceeded.";
         public static final String retrieving_host_key="Retrieving host key...  Please wait.";
-        public static final String server_host="127.0.0.1";
+        public static final String session_window_chatting_title="Now Chatting";
+        public static final String session_window_hosting_session_title="Hosting Session";
+        public static final String session_window_joining_session_title="Joining Session";
+        public static final String server_host="74.117.94.24";
         public static final String version="1.0.0";
     }
 }

@@ -26,6 +26,7 @@ import roge.net.ConnectionClient;
 import roge.net.ConnectionClient.DataReceivedListener;
 import roge.net.ConnectionClient.SignalReceivedListener;
 import roge.net.Signal;
+import roge.simplysecurechatclient.gui.ServerWindow.Signals.ChatMessage;
 import roge.simplysecurechatclient.resources.Resources;
 
 /**
@@ -106,8 +107,8 @@ public class SessionWindow extends RWindow implements DataReceivedListener,Signa
                     this._changeState(SessionState.CONNECTION_SUCCESS);
                     break;
             }
-        }else if(signal instanceof ServerWindow.Signals.ChatMessage){
-            this.getChatPanel().addMessage(signal.getMessage());
+        }else if(signal instanceof ChatMessage){
+            this.getChatPanel().receiveMessage((ChatMessage)signal);
         }
     }
     
@@ -175,8 +176,12 @@ public class SessionWindow extends RWindow implements DataReceivedListener,Signa
         this._onStateChanged(previous_state,state);
     }
     
-    protected void _displayChatWindow(JPanel content){        
+    protected void _displayChatWindow(JPanel content){    
+        this.setTitle(Resources.Strings.session_window_chatting_title);
+        
         this._changeState(SessionState.AWAITING_CHAT_MESSAGE);
+        this.setMinimumSize(new Dimension(400,600));
+        this.setResizable(true);
         
         content.setBackground(Color.WHITE);
         content.setLayout(new GridLayout(1,1));
@@ -256,6 +261,8 @@ public class SessionWindow extends RWindow implements DataReceivedListener,Signa
         final JLabel host_key_display=new JLabel();
         
         
+        this.setTitle(Resources.Strings.session_window_hosting_session_title);
+        
         content.setBackground(Color.WHITE);
         content.setLayout(new GridLayout(1,1));
         
@@ -307,6 +314,8 @@ public class SessionWindow extends RWindow implements DataReceivedListener,Signa
         JLabel  label=null;
         JButton connect=null;
         
+        
+        this.setTitle(Resources.Strings.session_window_joining_session_title);
         
         content.setLayout(new GridLayout(3,1));
         content.setBorder(new StripedBorder(Color.WHITE,Color.BLACK));

@@ -15,6 +15,7 @@ import roge.net.ConnectionServer;
 import roge.net.ConnectionServer.ClientConnectListener;
 import roge.net.ConnectionServer.ClientDisconnectListener;
 import roge.net.Signal;
+import roge.simplysecurechatclient.gui.ServerWindow.Signals.ChatMessage;
 import roge.simplysecurechatclient.resources.Resources;
 
 /**
@@ -28,7 +29,10 @@ public class ServerWindow implements ClientConnectListener,DataReceivedListener,
         /**Signal to send a chat message between sessions.*/
         public static class ChatMessage extends Signal{
             private static final long serialVersionUID = 4302065424064019563L;
+            
+            public long server_timestamp=0;
 
+            
             /*Begin Constructors*/
             /**
              * Constructs the signal to send a message between chat sessions.
@@ -214,6 +218,9 @@ public class ServerWindow implements ClientConnectListener,DataReceivedListener,
         }else if(signal instanceof ServerWindow.Signals.ChatMessage){
             if(this.getHosts().containsKey(client)||this.getClients().containsKey(client)){
                 try{
+                    this._processChatMessage((ServerWindow.Signals.ChatMessage)signal);
+                    
+                    client.send(signal);
                     this.getBrotherSession(client).send(signal);
                 }catch(IOException e){
                     e.printStackTrace();
@@ -252,7 +259,7 @@ public class ServerWindow implements ClientConnectListener,DataReceivedListener,
     /*End Getter Methods*/
     
     /*Begin Other Essential Methods*/
-    public ConnectionClient getBrotherSession(ConnectionClient brother){
+    protected ConnectionClient getBrotherSession(ConnectionClient brother){
         if(this.getHosts().containsKey(brother)){
             return this.getHosts().get(brother); 
         }else if(this.getClients().containsKey(brother)){
@@ -260,6 +267,12 @@ public class ServerWindow implements ClientConnectListener,DataReceivedListener,
         }else{
             return null;
         }
+    }
+    
+    protected void _processChatMessage(ChatMessage signal){
+        signal.server_timestamp=System.currentTimeMillis();
+        
+        //May add more here later.
     }
     /*End Other Essential Methods*/
 }
