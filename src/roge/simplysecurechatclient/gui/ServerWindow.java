@@ -4,8 +4,11 @@
 package roge.simplysecurechatclient.gui;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Map.Entry;
 
 import roge.net.ConnectionClient;
@@ -16,6 +19,7 @@ import roge.net.ConnectionServer.ClientConnectListener;
 import roge.net.ConnectionServer.ClientDisconnectListener;
 import roge.net.Signal;
 import roge.simplysecurechatclient.gui.ChatPanel.Signals.ChatMessage;
+import roge.simplysecurechatclient.gui.ServerWindow.Signals.CreateSessionConnection;
 import roge.simplysecurechatclient.resources.Resources;
 
 /**
@@ -23,9 +27,18 @@ import roge.simplysecurechatclient.resources.Resources;
  *
  */
 public class ServerWindow implements ClientConnectListener,DataReceivedListener,ClientDisconnectListener,SignalReceivedListener{
-    public static final String CLIENT_DISCONNECTED="client_disconnected";
+    /**Length of the host key in characters.*/
+    public static final int    HOST_KEY_LENGTH=4;  //This gives 2^32 allowed waiting hosts
+    /**Username that will be used in the event that the server sends out a ChatMessage signal.*/
+    public static final String SERVER_USERNAME="SYSTEM";
+    
     /**List of Signals present in this class.*/
-    public static class Signals{        
+    public static class Signals{
+        /**Notification of a client disconnection.*/
+        public static class ClientDisconnect extends Signal{
+            private static final long serialVersionUID = -1406154262352471194L;
+        }
+        
         /**Response signal containing the host key.*/
         public static class HostKeyResponse extends Signal{
             private static final long serialVersionUID = 2610575189906570480L;
@@ -100,12 +113,17 @@ public class ServerWindow implements ClientConnectListener,DataReceivedListener,
         }
     }
     
-    private Map<ConnectionClient,ConnectionClient> __clients;  //Where the key is the client
-    private Map<ConnectionClient,ConnectionClient> __hosts;  //Where the key is the host
-    private ConnectionServer __server;
-    private Map<String,ConnectionClient> __waiting_hosts;
+    private Map<ConnectionClient,ConnectionClient> __clients;  //Where the value is the client
+    private List<ConnectionClient>                 __connected_clients;
+    private List<ConnectionClient>                 __hanging_clients;
+    private Map<ConnectionClient,ConnectionClient> __hosts;  //Where the value is the host
+    private ConnectionServer                       __server;
+    private Map<String,ConnectionClient>           __waiting_hosts;
     
     /*Begin Constructors*/
+    /**
+     * Constructs the server.
+     */
     public ServerWindow(){
         this.__server=new ConnectionServer(Resources.Ints.server_port);
         this.__server.start();
@@ -116,7 +134,7 @@ public class ServerWindow implements ClientConnectListener,DataReceivedListener,
     /*End Constructors*/
     
     /*Begin Overridden Methods*/
-    @Override public boolean onClientConnect(ConnectionClient client){
+    @Override public boolean onClientConnect(ConnectionClient client){    
         client.addDataRecievedListener(this);
         client.addSignalListener(this);
 
@@ -124,63 +142,80 @@ public class ServerWindow implements ClientConnectListener,DataReceivedListener,
     }
     
     @Override public void onClientDisconnect(ConnectionClient client){
-        System.out.println("Client disconnected.");
+        ChatMessage signal=null;
         
+                
         if(this.getWaitingHosts().containsValue(client)){
-            for(Entry entry:this.getWaitingHosts().entrySet()){
+            for(Entry<String,ConnectionClient> entry:this.getWaitingHosts().entrySet()){
                 if(entry.getValue().equals(client)){
                     this.getWaitingHosts().remove(entry.getKey());
                 }
             }
         }else if(this.getClients().containsKey(client)){
             try{
-                this.getHosts().get(this.getClients().get(client)).send(ServerWindow.CLIENT_DISCONNECTED);
+                signal=new ChatMessage("The other session has disconnected.",ServerWindow.SERVER_USERNAME);
+                signal.setServerTimestamp(System.currentTimeMillis());
+                
+                this.getBrotherSession(client).send(signal);
+                this.getBrotherSession(client).send(new Signals.ClientDisconnect());
             }catch(IOException e){
                 e.printStackTrace();
             }
-            
-            this.getHosts().remove(this.getClients().get(client));
-            this.getClients().remove(client);
         }else if(this.getHosts().containsKey(client)){
             try{
-                this.getClients().get(this.getHosts().get(client)).send(ServerWindow.CLIENT_DISCONNECTED);
+                signal=new ChatMessage("The other session has disconnected.",ServerWindow.SERVER_USERNAME);
+                signal.setServerTimestamp(System.currentTimeMillis());
+                
+                this.getBrotherSession(client).send(signal);
+                this.getBrotherSession(client).send(new Signals.ClientDisconnect());
             }catch(IOException e){
                 e.printStackTrace();
             }
-            
-            this.getClients().remove(this.getHosts().get(client));
-            this.getHosts().remove(client);
         }
+        
+        this._removeClient(client);
+        client.disconnect(false);
     }
     
     @Override public void onDataReceived(ConnectionClient client,Object data){
-        
+        //Ain't nobody here but us chickens.
     }
     
     @Override public void onSignalReceived(ConnectionClient client,Signal signal){
-        ConnectionClient host=null;
+        ConnectionClient connection=null;
+        ChatMessage      chat_signal=null;
+        String           host_key=null;
+        long             seed=0;
         
         
         if(signal instanceof ServerWindow.Signals.HostKeyRequest){
+            host_key=this._retrieveNewHostKey();
+            
             try{
-                client.send(new ServerWindow.Signals.HostKeyResponse("12345"));
+                client.send(new ServerWindow.Signals.HostKeyResponse(host_key));
                 
-                this.getWaitingHosts().put("12345",client);
+                this.getAllConnectedClients().add(client);
+                this.getWaitingHosts().put(host_key,client);
             }catch(IOException e){
                 e.printStackTrace();
             }
-        }else if(signal instanceof ServerWindow.Signals.CreateSessionConnection){
-            System.out.print(this.getWaitingHosts().containsKey(signal.getMessage())+":"+signal.getMessage());
+        }else if(signal instanceof CreateSessionConnection){
             if(this.getWaitingHosts().containsKey(signal.getMessage())){
-                host=this.getWaitingHosts().get(signal.getMessage());
+                connection=this.getWaitingHosts().get(signal.getMessage());
                 
-                this.getClients().put(host,client);
-                this.getHosts().put(client,host);
+                this.getAllConnectedClients().add(client);  //This would be the first time the client has connected to this server.
+                this.getClients().put(connection,client);
+                this.getHosts().put(client,connection);
                 
                 this.getWaitingHosts().remove(signal.getMessage());
                 
                 try{
-                    host.send(new ServerWindow.Signals.ClientConnectionResponse(null,ServerWindow.Signals.ClientConnectionResponse.CONNECTION_SUCCESS));
+                    seed=new Random(System.currentTimeMillis()).nextLong();
+                    
+                    connection.send(new SessionWindow.Signals.Seed(seed));
+                    client.send(new SessionWindow.Signals.Seed(seed));
+                    
+                    connection.send(new ServerWindow.Signals.ClientConnectionResponse(null,ServerWindow.Signals.ClientConnectionResponse.CONNECTION_SUCCESS));
                     client.send(new ServerWindow.Signals.ClientConnectionResponse(null,ServerWindow.Signals.ClientConnectionResponse.CONNECTION_SUCCESS));
                 }catch(IOException e){
                     e.printStackTrace();
@@ -193,24 +228,41 @@ public class ServerWindow implements ClientConnectListener,DataReceivedListener,
                 }
             }
         }else if(signal instanceof ChatMessage){
-            if(this.getHosts().containsKey(client)||this.getClients().containsKey(client)){
-                try{
-                    System.out.print("Receieved message from "+((ChatMessage)signal).getSender()+"\n");
+            connection=this.getBrotherSession(client);
+            
+            try{
+                if(connection==null){ //Recall that this means that the clients' brothers' chat session has been disconnected.
+                    chat_signal=new ChatMessage("Message could not be sent.","SYSTEM");
+                    chat_signal.setServerTimestamp(System.currentTimeMillis());
+                    
+                    client.send(chat_signal);
+                }else{
                     this._processChatMessage((ChatMessage)signal);
                     
                     client.send(signal);
-                    this.getBrotherSession(client).send(signal);
-                }catch(IOException e){
-                    e.printStackTrace();
+                    connection.send(signal);    
                 }
-            }else{
-                //Right now we're just consuming the message if it can't be sent.
+            }catch(IOException e){
+                e.printStackTrace();
             }
         }
     }
     /*End Overridden Methods*/
     
     /*Begin Getter Methods*/
+    public List<ConnectionClient> getAllConnectedClients(){
+        if(this.__connected_clients==null){
+            this.__connected_clients=new ArrayList<ConnectionClient>();
+        }
+        
+        return this.__connected_clients;
+    }
+    
+    /**
+     * Gets the list of clients connected to this server.
+     * 
+     * @return Returns the list of clients connected to this server.
+     */
     public Map<ConnectionClient,ConnectionClient> getClients(){
         if(this.__clients==null){
             this.__clients=new HashMap<ConnectionClient,ConnectionClient>();
@@ -219,6 +271,19 @@ public class ServerWindow implements ClientConnectListener,DataReceivedListener,
         return this.__clients;
     }
     
+    public List<ConnectionClient> getHangingClientList(){
+        if(this.__hanging_clients==null){
+            this.__hanging_clients=new ArrayList<ConnectionClient>();
+        }
+        
+        return this.__hanging_clients;
+    }
+    
+    /**
+     * Gets the list of hosts connected to this server.
+     * 
+     * @return Returns the list of hosts connected to this server.
+     */
     public Map<ConnectionClient,ConnectionClient> getHosts(){
         if(this.__hosts==null){
             this.__hosts=new HashMap<ConnectionClient,ConnectionClient>();
@@ -227,6 +292,11 @@ public class ServerWindow implements ClientConnectListener,DataReceivedListener,
         return this.__hosts;
     }
     
+    /**
+     * Gets the list of hosts waiting for a client connection that are connected to this server.
+     * 
+     * @return Returns the list of hosts waiting for a client connection that are connected to this server.
+     */
     public Map<String,ConnectionClient> getWaitingHosts(){
         if(this.__waiting_hosts==null){
             this.__waiting_hosts=new HashMap<String,ConnectionClient>();
@@ -237,20 +307,90 @@ public class ServerWindow implements ClientConnectListener,DataReceivedListener,
     /*End Getter Methods*/
     
     /*Begin Other Essential Methods*/
+    /**
+     * Gets the session that is connected to the given session.
+     * 
+     * @param brother Session to get the connected session of.
+     * 
+     * @return Returns the session that is connected to the given session.
+     */
     protected ConnectionClient getBrotherSession(ConnectionClient brother){
+        if(!this.getAllConnectedClients().contains(brother)||this.getHangingClientList().contains(brother)){ //Yeah...  Trying to get the brother of a session that isn't even connected to this server usually doesn't work very well.
+            return null;
+        }
+        
         if(this.getHosts().containsKey(brother)){
             return this.getHosts().get(brother); 
         }else if(this.getClients().containsKey(brother)){
             return this.getClients().get(brother);
-        }else{
-            return null;
         }
+        
+        return null;
     }
     
+    /**
+     * Performs any necessary modifications to the chat signal that are necessary.
+     * 
+     * @param signal Chat message signal to process.
+     */
     protected void _processChatMessage(ChatMessage signal){
         signal.setServerTimestamp(System.currentTimeMillis());
         
         //May add more here later.
+    }
+    
+    protected void _removeClient(ConnectionClient client){
+        if(this.getAllConnectedClients().contains(client)){
+            if(this.getWaitingHosts().containsValue(client)){
+                for(Entry<String,ConnectionClient> entry:this.getWaitingHosts().entrySet()){
+                    if(entry.getValue().equals(client)){
+                        this.getWaitingHosts().remove(entry.getKey());
+                    }
+                }
+            }else if(this.getHosts().containsValue(client)){  //The client is a host, in this case.
+                for(Entry<ConnectionClient,ConnectionClient> entry:this.getHosts().entrySet()){
+                    if(entry.getValue().equals(client)){
+                        this.getHosts().remove(entry.getKey());
+                    }
+                }
+                this.getClients().remove(client);
+                this.getAllConnectedClients().remove(client);
+                
+                this.getHangingClientList().add(this.getBrotherSession(client));
+            }else if(this.getClients().containsValue(client)){
+                for(Entry<ConnectionClient,ConnectionClient> entry:this.getClients().entrySet()){
+                    if(entry.getValue().equals(client)){
+                        this.getClients().remove(entry.getKey());
+                    }
+                }
+                this.getHosts().remove(client);
+                this.getAllConnectedClients().remove(client);
+                
+                this.getHangingClientList().add(this.getBrotherSession(client));
+            }else if(this.getHangingClientList().contains(client)){
+                this.getHangingClientList().remove(client);
+            }else{
+              //NOTE:  We should never get here.
+            }
+        }else{
+            throw new RuntimeException("No such client was found."); 
+        }
+    }
+    
+    protected synchronized String _retrieveNewHostKey(){
+        String host_key=null;
+        Random generator=null;
+        
+        
+        generator=new Random(System.currentTimeMillis());
+        do{
+            host_key="";
+            for(int counter=0;counter<ServerWindow.HOST_KEY_LENGTH;counter++){
+                host_key+=Integer.toHexString(generator.nextInt(16));
+            }
+        }while(this.getWaitingHosts().containsKey(host_key));  //Do this just to ensure there are no conflicts in teh hosts waiting list.
+        
+        return host_key.toUpperCase();
     }
     /*End Other Essential Methods*/
 }

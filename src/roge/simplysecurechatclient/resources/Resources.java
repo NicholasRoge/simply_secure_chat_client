@@ -5,6 +5,11 @@ package roge.simplysecurechatclient.resources;
 
 /**Ideally, any resources which are used in more than one place, or are displayed to the user should be placed here for easy access.*/
 public final class Resources{
+    /**Boolean Resources*/
+    public final class Booleans{
+        public static final boolean debugging=false;
+    }
+    
     /**Integer Resources*/
     public final class Ints{
         /**Determines the maximum allowed time that a host will wait for a host key before timing out.  (Measured in milliseconds)*/

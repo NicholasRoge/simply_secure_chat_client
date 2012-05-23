@@ -18,10 +18,11 @@ public class Main{
      */
     public static void main(String[] args){
         boolean is_server=false;
-        ServerWindow test=null;
+        ServerWindow server=null;  //Eventually this will be integrated as one global variable, but because it's not inheriting from RWindow yet, we can't do that.
+        
         
         if(is_server){
-            test=new ServerWindow();
+            server=new ServerWindow();
         }else{
             Main.__start_session_window=new SessionWindow("Start Session");
             Main.__start_session_window.setVisible(true);
