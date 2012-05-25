@@ -126,6 +126,7 @@ public class ServerWindow implements ClientConnectListener,DataReceivedListener,
      */
     public ServerWindow(){
         this.__server=new ConnectionServer(Resources.Ints.server_port);
+        this.__server.setVerbose(Resources.Booleans.debugging);
         this.__server.start();
         
         this.__server.addClientConnectListener(this);
@@ -136,7 +137,7 @@ public class ServerWindow implements ClientConnectListener,DataReceivedListener,
     /*Begin Overridden Methods*/
     @Override public boolean onClientConnect(ConnectionClient client){    
         client.addDataRecievedListener(this);
-        client.addSignalListener(this);
+        client.addSignalReceivedListener(this);
 
         return true;
     }
@@ -212,8 +213,8 @@ public class ServerWindow implements ClientConnectListener,DataReceivedListener,
                 try{
                     seed=new Random(System.currentTimeMillis()).nextLong();
                     
-                    connection.send(new SessionWindow.Signals.Seed(seed));
-                    client.send(new SessionWindow.Signals.Seed(seed));
+                    connection.send(new ChatWindow.Signals.Seed(seed));
+                    client.send(new ChatWindow.Signals.Seed(seed));
                     
                     connection.send(new ServerWindow.Signals.ClientConnectionResponse(null,ServerWindow.Signals.ClientConnectionResponse.CONNECTION_SUCCESS));
                     client.send(new ServerWindow.Signals.ClientConnectionResponse(null,ServerWindow.Signals.ClientConnectionResponse.CONNECTION_SUCCESS));

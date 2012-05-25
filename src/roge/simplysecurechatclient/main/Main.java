@@ -18,7 +18,7 @@ public class Main{
      */
     public static void main(String[] args){
         boolean is_server=false;
-        ServerWindow server=null;  //Eventually this will be integrated as one global variable, but because it's not inheriting from RWindow yet, we can't do that.
+        ServerWindow server=null;
         
         
         if(is_server){

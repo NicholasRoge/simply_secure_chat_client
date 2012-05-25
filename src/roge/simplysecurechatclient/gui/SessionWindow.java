@@ -9,8 +9,6 @@ import java.awt.event.WindowEvent;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Random;
-
 import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -19,64 +17,21 @@ import javax.swing.JTextArea;
 import roge.gui.RWindow;
 import roge.gui.border.StripedBorder;
 import roge.net.ConnectionClient;
-import roge.net.ConnectionClient.DataReceivedListener;
-import roge.net.ConnectionClient.DataSendListener;
 import roge.net.ConnectionClient.SignalReceivedListener;
 import roge.net.Signal;
-import roge.simplysecurechatclient.gui.ChatPanel.Signals.ChatMessage;
 import roge.simplysecurechatclient.resources.Resources;
 
 
-/*
- * TODO_HIGH:  The chatting system, as it is now, has an inherent flaw where if Client A were to send AFTER Client B sends but BEFORE 
- * client B's message is received, the key for decrypting the messages will be incorrect, and thus, unable to encode those messages
- * correctly.  Once those messages all messages are received, however, the system be back in sync, and messages will be received as
- * correctly.
- */
+
 
 /**
  * Window allowing users to enter their session key and begin a chat session.
  * 
  * @author Nicholas Rogé
  */
-public class SessionWindow extends RWindow implements DataReceivedListener,DataSendListener,SignalReceivedListener{
+public class SessionWindow extends RWindow implements SignalReceivedListener{
     /**For serialization*/
     private static final long serialVersionUID=-2916506936890995484L;
-    
-    private static final int ENCRYPTION_KEY_LENGTH=32;
-    
-    /**List of signals that this object may send.*/
-    public static class Signals{
-        /**Allows the server to seed the encryption key generator with a given value.*/
-        public static class Seed extends Signal{
-            private static final long serialVersionUID = -5747992139402358714L;
-            
-            private long __seed;
-            
-            
-            /*Begin Constructors*/
-            /**
-             * Constructs this object.
-             * 
-             * @param seed Seed which will be used to seed the encryption key generator.
-             */
-            public Seed(long seed){
-                this.__seed=seed;
-            }
-            /*End Constructors*/
-            
-            /*Begin Getter Methods*/
-            /**
-             * Gets the seed.
-             * 
-             * @return Returns the seed.
-             */
-            public long getSeed(){
-                return this.__seed;
-            }
-            /*End Getter Methods*/
-        }
-    }
 
     /**Interface granting the ability to receive state change updates from this objects.*/
     public static interface SessionStateChangeListener{
@@ -92,25 +47,19 @@ public class SessionWindow extends RWindow implements DataReceivedListener,DataS
     
     /**List of possible window states*/
     public enum SessionState{
-        /**Occurs when a session is waiting for new chat messages.*/
-        AWAITING_CHAT_MESSAGE,
         /**Occurs when a hosting session successfully retrieves a host key and begins waiting for a client to connect to it.*/
         AWAITING_CONNECTION,
-        /**Occurs when a hosting session begins waiting for a host key.*/
-        AWAITING_HOST_KEY,
-        /**Occurs when a chat message is received.*/
-        CHAT_MESSAGE_RECEIVED,
         /**Occurs when the clients pair cannot be found.*/
         CONNECTION_FAILURE,
         /**Occurs when a session connects to another session.*/
         CONNECTION_SUCCESS,
-        /**Occurs when a hosting session fails to receive its host key.*/
-        HOST_KEY_RETRIEVAL_FAILED
     };
     
-    private ChatPanel        __chat_panel;
+    /**By default, the connection should be closed when this window is closed.  However, in the event that we're closing the window to open the ChatWindow, the connection should remain open.*/
+    private boolean          __close_connection_on_exit;
     private SessionState     __current_status;
-    private String           __encryption_key;
+    private Long             __encryption_seed;
+    private String           __host_key;
     private boolean          __is_host;
     private ConnectionClient __server_connection;
     private List<SessionStateChangeListener> __session_state_change_listeners;
@@ -131,33 +80,19 @@ public class SessionWindow extends RWindow implements DataReceivedListener,DataS
      */
     public SessionWindow(String title){
         super(title);
+        
+        this.__close_connection_on_exit=true;
     }
     /*End Constructors*/
     
     /*Overridden Methods*/
     @Override protected void _addContent(JPanel content){
         this._displayGetSessionTypePanel(content);
-    }
-    
-    @Override public void onDataReceived(ConnectionClient client,Object data){
-    }
-    
-    @Override public boolean onDataSend(ConnectionClient client,Object data){
-        if(data instanceof Signal){
-            if(data instanceof ChatMessage){                
-                this.__encryptChatMessageSignal((ChatMessage)data);
-                System.out.print("Encrypted message being sent:  "+((ChatMessage)data).getChatMessage()+"\n");
-                return true;
-            }
-        }
-        
-        return true;
-    }
-    
+    } 
     
     @Override public void onSignalReceived(ConnectionClient client,Signal signal){
         if(signal instanceof ServerWindow.Signals.HostKeyResponse){
-            this.__encryption_key=signal.getMessage();
+            this.__host_key=signal.getMessage();
         }else if(signal instanceof ServerWindow.Signals.ClientConnectionResponse){
             switch(signal.getMessageCode()){
                 case ServerWindow.Signals.ClientConnectionResponse.CONNECTION_FAILURE:
@@ -167,50 +102,23 @@ public class SessionWindow extends RWindow implements DataReceivedListener,DataS
                     this._changeState(SessionState.CONNECTION_SUCCESS);
                     break;
             }
-        }else if(signal instanceof Signals.Seed){
-            this.regenerateEncryptionKey(((Signals.Seed)signal).getSeed());
-        }else if(signal instanceof ChatMessage){
-            this.__decryptChatMessageSignal((ChatMessage)signal);
-            
-            this._changeState(SessionState.CHAT_MESSAGE_RECEIVED);
-            
-            if(!((ChatMessage) signal).getSenderUsername().equals(ServerWindow.SERVER_USERNAME)){  //If the message is coming from the server, it doesn't have to be unencrypted.
-                this.getChatPanel().receiveMessage((ChatMessage)signal);
-            }
-            
-            this._changeState(SessionState.AWAITING_CHAT_MESSAGE);
+        }else if(signal instanceof ChatWindow.Signals.Seed){
+            this.__encryption_seed=new Long(((ChatWindow.Signals.Seed)signal).getSeed());
         }
     }
     
     @Override public void windowClosing(WindowEvent event){
-        if(this.__server_connection!=null){
-            if(this.__server_connection.isConnected()){
-                this.__server_connection.disconnect();
+        if(this.__close_connection_on_exit){
+            if(this.__server_connection!=null){
+                if(this.__server_connection.isConnected()){
+                    this.__server_connection.disconnect();
+                }
             }
         }
-        
-        System.exit(0);
     }
     /*End Overridden Methods*/
     
-    /*Begin Getter Methods*/
-    /**
-     * Gets the chat panel for this window.
-     * 
-     * @return Returns the chat panel for this window.
-     */
-    public ChatPanel getChatPanel(){
-        if(this.__chat_panel==null){
-            if(this.__is_host){
-                this.__chat_panel=new ChatPanel("Host");
-            }else{
-                this.__chat_panel=new ChatPanel("Client");
-            }
-        }
-        
-        return this.__chat_panel;
-    }
-    
+    /*Begin Getter Methods*/    
     /**
      * Gets the currently active connection to the server.
      * 
@@ -224,9 +132,7 @@ public class SessionWindow extends RWindow implements DataReceivedListener,DataS
             
             this.__server_connection.setVerbose(Resources.Booleans.debugging);
             this.__server_connection.connect();
-            this.__server_connection.addDataRecievedListener(this);
-            this.__server_connection.addDataSendListener(this);
-            this.__server_connection.addSignalListener(this);
+            this.__server_connection.addSignalReceivedListener(this);
         }
 
         return this.__server_connection;
@@ -303,45 +209,6 @@ public class SessionWindow extends RWindow implements DataReceivedListener,DataS
         this._onStateChanged(previous_state,state);
     }
     
-    private final void __decryptChatMessageSignal(ChatMessage signal){
-        char   current_character=0x00;
-        String message=null;
-        
-        
-        if(!signal.getSenderUsername().equals("SYSTEM")){  //System messages don't have to be decrypted.
-            message=signal.getChatMessage();
-            for(int encryption_key_index=this.__encryption_key.length()-1;encryption_key_index>-1;encryption_key_index--){
-                for(int message_index=0;message_index<message.length();message_index++){
-                    current_character=message.charAt(message_index);
-                    
-                    current_character=(char)((int)current_character^(int)this.__encryption_key.charAt(encryption_key_index));
-                    message=message.substring(0,message_index)+current_character+message.substring(message_index+1,message.length());  //This just replaces the character we modified.
-                }
-            }
-        }
-        
-        signal.setMessage(message);
-    }
-    
-    /**
-     * Allows the user to chat with the brother session to which this session is connected.
-     * 
-     * @param content Panel which all components should be added to.
-     */
-    protected void _displayChatWindow(JPanel content){    
-        this.setTitle(Resources.Strings.session_window_chatting_title);
-        
-        this._changeState(SessionState.AWAITING_CHAT_MESSAGE);
-        this.setMinimumSize(new Dimension(400,600));
-        this.setResizable(true);
-        
-        content.setBackground(Color.WHITE);
-        content.setLayout(new GridLayout(1,1));
-            this.getChatPanel().setConnection(this.__server_connection);  //Server connection has to be initialized to be here.
-            this.getChatPanel().getInputArea().setBorder(new StripedBorder(Color.WHITE,Color.BLACK));
-            content.add(this.getChatPanel());
-    }
-    
     /**
      * Notifies the user that they failed to connect to the host/client
      * 
@@ -381,7 +248,7 @@ public class SessionWindow extends RWindow implements DataReceivedListener,DataS
                     content=new JPanel();
                     SessionWindow.this._displayHostKey(content);
                     
-                    SessionWindow.this.changeContentPane(content);
+                    SessionWindow.this.changeContentPane(content,true);
                 }
                 
             });
@@ -399,7 +266,7 @@ public class SessionWindow extends RWindow implements DataReceivedListener,DataS
                     content=new JPanel();
                     SessionWindow.this._displayJoinHost(content);
                     
-                    SessionWindow.this.changeContentPane(content);
+                    SessionWindow.this.changeContentPane(content,true);
                 }
              });
             content.add(join_session);
@@ -434,10 +301,9 @@ public class SessionWindow extends RWindow implements DataReceivedListener,DataS
 
                     server.send(new ServerWindow.Signals.HostKeyRequest());
                     
-                    SessionWindow.this._changeState(SessionState.AWAITING_HOST_KEY);
                     host_key_retrieval_begin_time=System.currentTimeMillis();
                     while(true){  //Block until we have a host key, or we exceed the timeout
-                        if(SessionWindow.this.__encryption_key==null){
+                        if(SessionWindow.this.__host_key==null){
                             if((System.currentTimeMillis()-host_key_retrieval_begin_time)>Resources.Ints.host_key_retrieval_timeout){  //If the time difference is greater than a second
                                 throw new IOException(Resources.Strings.host_key_timeout_exceeded);
                             }
@@ -449,13 +315,12 @@ public class SessionWindow extends RWindow implements DataReceivedListener,DataS
                     }
                     
                     SessionWindow.this.__is_host=true;
-                    host_key_display.setText(SessionWindow.this.__encryption_key);//Recall that if it gets to this point, no exceptions were thrown and a host key was retrieved successfully
+                    host_key_display.setText(SessionWindow.this.__host_key);//Recall that if it gets to this point, no exceptions were thrown and a host key was retrieved successfully
                     
                     SessionWindow.this._changeState(SessionState.AWAITING_CONNECTION);
                 }catch(InterruptedException e){
                     e.printStackTrace();
                 }catch(IOException e){                    
-                    SessionWindow.this._changeState(SessionState.HOST_KEY_RETRIEVAL_FAILED);
                     host_key_display.setText("<html>"+String.format(Resources.Strings.host_key_retrieval_failed,e.getMessage())+"</html>");
                 }
             }
@@ -501,7 +366,7 @@ public class SessionWindow extends RWindow implements DataReceivedListener,DataS
                         server.send(new ServerWindow.Signals.CreateSessionConnection(key.getText()));
                         
                         SessionWindow.this.__is_host=false;
-                        SessionWindow.this.__encryption_key=key.getText();
+                        SessionWindow.this.__host_key=key.getText();
                         SessionWindow.this._changeState(SessionState.AWAITING_CONNECTION);
                     }catch(IOException e1){
                         e1.printStackTrace();
@@ -510,24 +375,6 @@ public class SessionWindow extends RWindow implements DataReceivedListener,DataS
                 
             });
             content.add(connect);
-    }
-    
-    private final void __encryptChatMessageSignal(ChatMessage signal){
-        char   current_character=0x00;
-        String message=null;
-        
-        
-        message=signal.getChatMessage();
-        for(int encryption_key_index=0;encryption_key_index<this.__encryption_key.length();encryption_key_index++){
-            for(int message_index=0;message_index<message.length();message_index++){
-                current_character=message.charAt(message_index);
-                
-                current_character=(char)((int)current_character^(int)this.__encryption_key.charAt(encryption_key_index));
-                message=message.substring(0,message_index)+current_character+message.substring(message_index+1,message.length());  //This just replaces the character we modified. 
-            }
-        }
-        
-        signal.setMessage(message);
     }
     
     /**
@@ -541,73 +388,42 @@ public class SessionWindow extends RWindow implements DataReceivedListener,DataS
         
         switch(current_state){
             case CONNECTION_SUCCESS:
-                this.regenerateEncryptionKey();
+                this._openChatWindow();
                 
-                panel=new JPanel();
-                this._displayChatWindow(panel);
-                this.changeContentPane(panel);
                 break;
             case CONNECTION_FAILURE:
                 panel=new JPanel();
                 this._displayFailedConnect(panel);
-                this.changeContentPane(panel);
-                break;
-            case CHAT_MESSAGE_RECEIVED:
-                this.regenerateEncryptionKey();
+                this.changeContentPane(panel,true);
                 
                 break;
         }
     }
     
     /**
-     * Changes the encryption key.
-     */
-    
-    private final void regenerateEncryptionKey(){
-        char convert_me[]=null;
-        long seed=0;
-        
-        
-        if(this.__encryption_key.length()>=16){
-            convert_me=this.__encryption_key.substring(0,16).toCharArray();
-        }else{
-            convert_me=this.__encryption_key.substring(0,this.__encryption_key.length()).toCharArray();
-        }
-        
-        for(int index=0;index<convert_me.length;index++){
-            seed+=convert_me[index]<<(index*8);
-        }
-        
-        this.regenerateEncryptionKey(seed);
-    }
-    
-    /**
-     * Changes the encryption key, and seeds the number generator with the given parameter.
+     * Allows the user to chat with the brother session to which this session is connected.
      * 
-     * @param seed Seed for the random number generator.
+     * @param content Panel which all components should be added to.
      */
-    private final void regenerateEncryptionKey(long seed){        
-        int character=0;
-        List<Character> character_pool=null;
-        Random generator=null;
-        String new_encryption_key=null;
- 
-                
-        character_pool=new ArrayList<Character>();
-        generator=new Random(seed);
-            
-        for(int index=0;index<SessionWindow.ENCRYPTION_KEY_LENGTH;index++){
-            character_pool.add(new Character((char)generator.nextInt(256)));
+    protected void _openChatWindow(){
+        while(this.__encryption_seed==null){  //Block until we have an encryption key seed
+            try{
+                Thread.sleep(10);
+            }catch(InterruptedException e){
+                e.printStackTrace();
+            }
         }
         
-        for(int chars_left=character_pool.size();chars_left>0;chars_left--){
-            character=Math.abs(generator.nextInt(character_pool.size()));
-            
-            new_encryption_key+=character_pool.get(character);
-            character_pool.remove(character);
-        }
+        this.__server_connection.removeSignalReceivedListener(this);
+        this.setVisible(false);
+        this.__close_connection_on_exit=false;
+        this.dispose();
         
-        this.__encryption_key=new_encryption_key;
+        if(this.__is_host){
+            new ChatWindow(Resources.Strings.session_window_chatting_title,this.__server_connection,"Host",this.__encryption_seed.longValue()).setVisible(true);
+        }else{
+            new ChatWindow(Resources.Strings.session_window_chatting_title,this.__server_connection,"Client",this.__encryption_seed.longValue()).setVisible(true);
+        }
     }
     /*End Other Essential Methods*/
 }

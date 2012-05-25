@@ -174,7 +174,7 @@ public class ChatPanel extends JPanel{
     private JScrollPane      __chat_message_area_container;
     private List<Message>    __chat_messages;
     private ETextArea        __input_area;
-    private ConnectionClient __server;
+    private ConnectionClient __server_connection;
 
     
     /*Begin Constructors*/
@@ -182,12 +182,20 @@ public class ChatPanel extends JPanel{
      * Constructs the ChatPanel
      * 
      * @param chat_username Sets the username for this chat client.
+     * @param server_connection Already initialized and connected connection to use when sending messages to another chat session.  Will throw a <code>NullPointerException</code> if this parameter is null, or a <code>IllegalArgumentException</code> if the connection hasn't been initialized yet.
      */
-    public ChatPanel(String chat_username){
+    public ChatPanel(String chat_username,ConnectionClient server_connection){
         GridBagConstraints constraints=null;
         
         
+        if(server_connection==null){
+            throw new NullPointerException();
+        }else if(!server_connection.isConnected()){
+            throw new IllegalArgumentException();
+        }
+        
         this.__chat_username=chat_username;
+        this.__server_connection=server_connection;
         
         this.setLayout(new GridLayout(2,1));
         constraints=new GridBagConstraints();
@@ -267,11 +275,11 @@ public class ChatPanel extends JPanel{
                                 case KeyEvent.KEY_PRESSED:
                                     if(isValidInput(ChatPanel.this.__input_area.getText())){
                                         try{
-                                            if(ChatPanel.this.__server==null){
+                                            if(ChatPanel.this.__server_connection==null){
                                                 throw new IOException("Connection to the server has not yet been set.");
                                             }
                                             
-                                            ChatPanel.this.__server.send(new ChatMessage(ChatPanel.this.__input_area.getText(),ChatPanel.this.getChatUsername()));
+                                            ChatPanel.this.__server_connection.send(new ChatMessage(ChatPanel.this.__input_area.getText(),ChatPanel.this.getChatUsername()));
                                             
                                             ChatPanel.this.__input_area.setText("");
                                         }catch(IOException e){
@@ -322,21 +330,6 @@ public class ChatPanel extends JPanel{
      */
     public void setChatUsername(String chat_username){
         this.__chat_username=chat_username;
-    }
-    
-    /**
-     * Sets the connection to use when sending messages to another chat session.
-     * 
-     * @param connection Already initialized and connected connection to use when sending messages to another chat session.  Will throw a <code>NullPointerException</code> if this parameter is null, or a <code>IllegalArgumentException</code> if the connection hasn't been initialized yet.  
-     */
-    public void setConnection(ConnectionClient connection){
-        if(connection==null){
-            throw new NullPointerException();
-        }else if(!connection.isConnected()){
-            throw new IllegalArgumentException();
-        }
-        
-        this.__server=connection;
     }
     /*End Setter Methods*/
     
