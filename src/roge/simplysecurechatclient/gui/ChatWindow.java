@@ -7,16 +7,21 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.KeyEvent;
 import java.awt.event.WindowEvent;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
+import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.JPanel;
 import javax.swing.KeyStroke;
+import javax.swing.filechooser.FileFilter;
 
 import roge.gui.RWindow;
 import roge.gui.border.StripedBorder;
@@ -24,6 +29,7 @@ import roge.net.ConnectionClient;
 import roge.net.ConnectionClient.DataSendListener;
 import roge.net.ConnectionClient.SignalReceivedListener;
 import roge.net.Signal;
+import roge.simplysecurechatclient.gui.ChatPanel.Message;
 import roge.simplysecurechatclient.gui.ChatPanel.Signals.ChatMessage;
 
 /*
@@ -149,6 +155,75 @@ public class ChatWindow extends RWindow implements DataSendListener,SignalReceiv
             menu.setMnemonic('f');
                 menu_item=new JMenuItem("Export Conversation");
                 menu_item.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_E,KeyEvent.CTRL_MASK));
+                menu_item.addActionListener(new ActionListener(){
+                    @Override public void actionPerformed(ActionEvent event){
+                        File         chosen_file=null;
+                        String       extension=null;
+                        JFileChooser file_chooser=null;
+                        FileOutputStream file_stream=null;
+                        
+                        
+                        file_chooser=new JFileChooser();
+                        file_chooser.setFileFilter(new FileFilter(){
+                            @Override public boolean accept(File file){
+                                String extension=null;
+                                
+                                
+                                if(file.isDirectory()){
+                                    return true;
+                                }
+                                
+                                extension=file.getName();
+                                if(extension.lastIndexOf('.')==-1){
+                                    return false;  //Filter the file out if it has no extension.
+                                }
+                                
+                                extension=extension.substring(extension.lastIndexOf('.')+1,extension.length());
+                                if(extension.equals("txt")){
+                                    return true;
+                                }else{
+                                    return false;
+                                }
+                            }
+                            
+                            @Override public String getDescription(){
+                                return "*.txt";
+                            }
+                            
+                        });
+                        
+                        if(file_chooser.showSaveDialog(ChatWindow.this)==JFileChooser.APPROVE_OPTION){
+                            chosen_file=file_chooser.getSelectedFile();
+                            
+                            this.addExtensionIfNotExists(chosen_file,"txt");
+                            
+                            ChatWindow.this._exportChat(chosen_file);
+                        }
+                    }
+                    
+                    public void addExtensionIfNotExists(File file,String extension){
+                        String filename=null;
+                        int    last_period_index=-1;
+                        
+                        
+                        filename=file.getName();
+                        
+                        last_period_index=filename.lastIndexOf('.');
+                        if(last_period_index==-1){
+                            file.renameTo(new File(filename+"."+extension));
+                        }else{
+                            if(!filename.substring(last_period_index+1,filename.length()).equals(extension)){
+                                if(last_period_index==filename.length()-1){  //In this case you have a file where the filename is something like "filename.".
+                                    file.renameTo(new File(filename+extension));
+                                }else{
+                                    file.renameTo(new File(filename+"."+extension));
+                                }
+                            }
+                        }
+                        
+                        return;
+                    }
+                });
                 menu.add(menu_item);
                 
                 menu.addSeparator();
@@ -260,6 +335,23 @@ public class ChatWindow extends RWindow implements DataSendListener,SignalReceiv
         }
         
         signal.setMessage((char)wrap_count+encrypted_message);
+    }
+    
+    protected void _exportChat(File file){
+        FileOutputStream output_stream=null;
+        
+        
+        try{
+            output_stream=new FileOutputStream(file);
+        
+            for(Message message:ChatWindow.this.getChatPanel().getChatMessages()){
+                for(char character:(message.toString()+System.getProperty("line.separator")).toCharArray()){
+                    output_stream.write(character);
+                }
+            }
+        }catch(IOException e){
+            e.printStackTrace();
+        }
     }
     
     /**
