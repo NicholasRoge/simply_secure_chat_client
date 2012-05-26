@@ -210,16 +210,24 @@ public class ChatWindow extends RWindow implements DataSendListener,SignalReceiv
     private final void __decryptChatMessageSignal(ChatMessage signal){
         char   current_character=0x00;
         String message=null;
+        int    message_index=0;
+        int    wrap_number=0;
         
         
-        if(!signal.getSenderUsername().equals("SYSTEM")){  //System messages don't have to be decrypted.
-            message=signal.getChatMessage();
-            for(int encryption_key_index=this.__encryption_key.length()-1;encryption_key_index>-1;encryption_key_index--){
-                for(int message_index=0;message_index<message.length();message_index++){
-                    current_character=message.charAt(message_index);
-                    
-                    current_character=(char)((int)current_character^(int)this.__encryption_key.charAt(encryption_key_index));
-                    message=message.substring(0,message_index)+current_character+message.substring(message_index+1,message.length());  //This just replaces the character we modified.
+        message=signal.getChatMessage();
+        wrap_number=message.charAt(0);
+        message=message.substring(1,message.length());//Gotta get rid of the first wrap amount character.
+        message_index=message.length()-1;
+        
+        for(int counter=0;counter<wrap_number;counter++){
+            for(int encryption_key_index=this.__encryption_key.length()-1;encryption_key_index>-1;encryption_key_index--,message_index--){
+                current_character=message.charAt(message_index);
+                
+                current_character=(char)((int)current_character^(int)this.__encryption_key.charAt(encryption_key_index));
+                message=message.substring(0,message_index)+current_character+message.substring(message_index+1,message.length());  //This just replaces the character we modified.
+                
+                if(message_index==0){
+                    message_index=message.length();
                 }
             }
         }
@@ -228,21 +236,30 @@ public class ChatWindow extends RWindow implements DataSendListener,SignalReceiv
     }
     
     private final void __encryptChatMessageSignal(ChatMessage signal){
-        char   current_character=0x00;
-        String message=null;
+        char    current_character=0x00;
+        String  encrypted_message=null;
+        int     wrap_count=1;
         
         
-        message=signal.getChatMessage();
-        for(int encryption_key_index=0;encryption_key_index<this.__encryption_key.length();encryption_key_index++){
-            for(int message_index=0;message_index<message.length();message_index++){
-                current_character=message.charAt(message_index);
-                
-                current_character=(char)((int)current_character^(int)this.__encryption_key.charAt(encryption_key_index));
-                message=message.substring(0,message_index)+current_character+message.substring(message_index+1,message.length());  //This just replaces the character we modified. 
+        encrypted_message=signal.getChatMessage();            
+        for(int encryption_key_index=0,message_index=0;(encryption_key_index!=this.__encryption_key.length())||(message_index!=encrypted_message.length());encryption_key_index++,message_index++){
+            if(message_index==encrypted_message.length()){
+                message_index=0;
             }
+            
+            if(encryption_key_index==this.__encryption_key.length()){
+                wrap_count++;
+                
+                encryption_key_index=0;
+            }
+            
+            current_character=encrypted_message.charAt(message_index);
+            
+            current_character=(char)((int)current_character^(int)this.__encryption_key.charAt(encryption_key_index));
+            encrypted_message=encrypted_message.substring(0,message_index)+current_character+encrypted_message.substring(message_index+1,encrypted_message.length());  //This just replaces the character we modified. 
         }
         
-        signal.setMessage(message);
+        signal.setMessage((char)wrap_count+encrypted_message);
     }
     
     /**
