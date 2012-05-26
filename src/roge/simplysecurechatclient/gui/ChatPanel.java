@@ -14,6 +14,7 @@ import java.util.List;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextPane;
+import javax.swing.SpringLayout;
 import javax.swing.text.BadLocationException;
 import roge.gui.widget.ETextArea;
 import roge.net.ConnectionClient;
@@ -185,7 +186,7 @@ public class ChatPanel extends JPanel{
      * @param server_connection Already initialized and connected connection to use when sending messages to another chat session.  Will throw a <code>NullPointerException</code> if this parameter is null, or a <code>IllegalArgumentException</code> if the connection hasn't been initialized yet.
      */
     public ChatPanel(String chat_username,ConnectionClient server_connection){
-        GridBagConstraints constraints=null;
+        SpringLayout layout=null;
         
         
         if(server_connection==null){
@@ -197,26 +198,27 @@ public class ChatPanel extends JPanel{
         this.__chat_username=chat_username;
         this.__server_connection=server_connection;
         
-        this.setLayout(new GridLayout(2,1));
-        constraints=new GridBagConstraints();
-        constraints.fill=GridBagConstraints.BOTH;
-        constraints.weightx=GridBagConstraints.REMAINDER;
-        constraints.gridx=0;
-            constraints.gridy=0;
-            constraints.weighty=GridBagConstraints.REMAINDER;
-            this.__chat_message_area_container=new JScrollPane(this.getChatMessageArea(),JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
-            this.__chat_message_area_container.setAutoscrolls(true);
-                this.getChatMessageArea().setEnabled(false);
-                this.getChatMessageArea().setDisabledTextColor(Color.BLACK);
-            this.add(this.__chat_message_area_container,constraints);
-            
-            constraints.gridy=1;
-            constraints.weighty=0;
-            this.getInputArea().setPreferredSize(new Dimension(0,80));
-            this.getInputArea().setLineWrap(true);
-            this.getInputArea().setWrapStyleWord(true);
-            this.getInputArea().setAutoscrolls(true);
-            this.add(this.getInputArea(),constraints);
+        layout=new SpringLayout();
+        this.setLayout(layout);
+
+        this.__chat_message_area_container=new JScrollPane(this.getChatMessageArea(),JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        this.__chat_message_area_container.setAutoscrolls(true);
+            this.getChatMessageArea().setEnabled(false);
+            this.getChatMessageArea().setDisabledTextColor(Color.BLACK);
+        this.add(this.__chat_message_area_container);
+        layout.putConstraint(SpringLayout.NORTH,this.__chat_message_area_container,0,SpringLayout.NORTH,this);
+        layout.putConstraint(SpringLayout.EAST,this.__chat_message_area_container,0,SpringLayout.EAST,this);
+        layout.putConstraint(SpringLayout.WEST,this.__chat_message_area_container,0,SpringLayout.WEST,this);
+        layout.putConstraint(SpringLayout.SOUTH,this.__chat_message_area_container,0,SpringLayout.NORTH,this.getInputArea());
+              
+        this.getInputArea().setLineWrap(true);
+        this.getInputArea().setWrapStyleWord(true);
+        this.getInputArea().setAutoscrolls(true);
+        this.add(this.getInputArea());
+        layout.putConstraint(SpringLayout.NORTH,this.getInputArea(),-80,SpringLayout.SOUTH,this);  //I don't think this is the proper way to do this, but it will have to do until I can figure out what the proper way is.
+        layout.putConstraint(SpringLayout.EAST,this.getInputArea(),0,SpringLayout.EAST,this);
+        layout.putConstraint(SpringLayout.WEST,this.getInputArea(),0,SpringLayout.WEST,this);
+        layout.putConstraint(SpringLayout.SOUTH,this.getInputArea(),0,SpringLayout.SOUTH,this);
     }
     /*End Constructors*/
     

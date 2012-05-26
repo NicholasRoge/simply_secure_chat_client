@@ -3,12 +3,20 @@ package roge.simplysecurechatclient.gui;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.GridLayout;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.awt.event.KeyEvent;
 import java.awt.event.WindowEvent;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
+import javax.swing.JFrame;
+import javax.swing.JMenu;
+import javax.swing.JMenuBar;
+import javax.swing.JMenuItem;
 import javax.swing.JPanel;
+import javax.swing.KeyStroke;
 
 import roge.gui.RWindow;
 import roge.gui.border.StripedBorder;
@@ -129,6 +137,33 @@ public class ChatWindow extends RWindow implements DataSendListener,SignalReceiv
             this.__chat_panel=new ChatPanel(this.__client_name,this.__server_connection);
             this.getChatPanel().getInputArea().setBorder(new StripedBorder(Color.WHITE,Color.BLACK));
             content.add(this.getChatPanel());
+    }
+    
+    @Override protected void _addMenu(JFrame frame){
+        JMenuBar menu_bar=null;
+        JMenu menu=null;
+        JMenuItem menu_item=null;
+        
+        menu_bar=new JMenuBar();
+            menu=new JMenu("File");
+            menu.setMnemonic('f');
+                menu_item=new JMenuItem("Export Conversation");
+                menu_item.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_E,KeyEvent.CTRL_MASK));
+                menu.add(menu_item);
+                
+                menu.addSeparator();
+                
+                menu_item=new JMenuItem("Exit");
+                menu_item.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F4,KeyEvent.ALT_MASK));
+                menu_item.addActionListener(new ActionListener(){
+                    @Override public void actionPerformed(ActionEvent event){
+                        ChatWindow.this.setVisible(false);
+                        ChatWindow.this.dispose();
+                    }
+                });
+                menu.add(menu_item);
+            menu_bar.add(menu);
+        frame.setJMenuBar(menu_bar);
     }
     
     @Override public boolean onDataSend(ConnectionClient client,Object data){
