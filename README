@@ -1,1 +1,7 @@
-Any changes made here won't carry over to the master branch, right?
+This project is meant for educational purposes.  It is completely free to use, modify, and redistribute as long as this readme file remains intact.
+
+Project information:
+	Title:  Simply Secure Chat Client
+	Developer:  Nicholas Rogé
+	Purpose:
+		This project is meant to provide those who need it with a one-time use chat client that will enable two people to remotely connect and communicate with each other with a secure connection.
