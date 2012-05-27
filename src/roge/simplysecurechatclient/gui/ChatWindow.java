@@ -29,15 +29,10 @@ import roge.net.ConnectionClient;
 import roge.net.ConnectionClient.DataSendListener;
 import roge.net.ConnectionClient.SignalReceivedListener;
 import roge.net.Signal;
+import roge.security.DataEncryptor;
 import roge.simplysecurechatclient.gui.ChatPanel.Message;
 import roge.simplysecurechatclient.gui.ChatPanel.Signals.ChatMessage;
 
-/*
- * TODO_HIGH:  The chatting system, as it is now, has an inherent flaw where if Client A were to send AFTER Client B sends but BEFORE 
- * client B's message is received, the key for decrypting the messages will be incorrect, and thus, unable to encode those messages
- * correctly.  Once those messages all messages are received, however, the system be back in sync, and messages will be received as
- * correctly.
- */
 
 /**
  * Window which displays the chat interface, allowing two clients to communicate.
@@ -84,7 +79,7 @@ public class ChatWindow extends RWindow implements DataSendListener,SignalReceiv
 
     private ChatPanel        __chat_panel;
     private String           __client_name;
-    private String           __encryption_key;
+    private DataEncryptor    __encryptor;
     private ConnectionClient __server_connection;
     
     
@@ -129,7 +124,7 @@ public class ChatWindow extends RWindow implements DataSendListener,SignalReceiv
         this.__server_connection.addDataSendListener(this);
         this.__server_connection.addSignalReceivedListener(this);
         
-        this.__regenerateEncryptionKey(encryption_key_seed);
+        this.__encryptor=new DataEncryptor(encryption_key_seed);
         
         this.setSize(new Dimension(400,600));
     }
@@ -158,9 +153,7 @@ public class ChatWindow extends RWindow implements DataSendListener,SignalReceiv
                 menu_item.addActionListener(new ActionListener(){
                     @Override public void actionPerformed(ActionEvent event){
                         File         chosen_file=null;
-                        String       extension=null;
                         JFileChooser file_chooser=null;
-                        FileOutputStream file_stream=null;
                         
                         
                         file_chooser=new JFileChooser();
@@ -195,28 +188,38 @@ public class ChatWindow extends RWindow implements DataSendListener,SignalReceiv
                         if(file_chooser.showSaveDialog(ChatWindow.this)==JFileChooser.APPROVE_OPTION){
                             chosen_file=file_chooser.getSelectedFile();
                             
-                            this.addExtensionIfNotExists(chosen_file,"txt");
+                            try{
+                                this.addExtensionIfNotExists(chosen_file,"txt");
+                            }catch(IOException e){
+                                return;  //If we couldn't add the extension...
+                            }
                             
                             ChatWindow.this._exportChat(chosen_file);
                         }
                     }
                     
-                    public void addExtensionIfNotExists(File file,String extension){
+                    public void addExtensionIfNotExists(File file,String extension) throws IOException{
                         String filename=null;
                         int    last_period_index=-1;
                         
-                        
+                                                
                         filename=file.getName();
                         
                         last_period_index=filename.lastIndexOf('.');
-                        if(last_period_index==-1){
-                            file.renameTo(new File(filename+"."+extension));
+                        if(last_period_index==-1){                            
+                            if(!file.renameTo(new File(file.toString()+"."+extension))){
+                                throw new IOException("Could not add extension to filename.");
+                            }
                         }else{
                             if(!filename.substring(last_period_index+1,filename.length()).equals(extension)){
                                 if(last_period_index==filename.length()-1){  //In this case you have a file where the filename is something like "filename.".
-                                    file.renameTo(new File(filename+extension));
+                                    if(!file.renameTo(new File(file.toString()+extension))){
+                                        throw new IOException("Could not add extension to filename.");
+                                    }
                                 }else{
-                                    file.renameTo(new File(filename+"."+extension));
+                                    if(!file.renameTo(new File(file.toString()+"."+extension))){
+                                        throw new IOException("Could not add extension to filename.");
+                                    }
                                 }
                             }
                         }
@@ -242,10 +245,34 @@ public class ChatWindow extends RWindow implements DataSendListener,SignalReceiv
     }
     
     @Override public boolean onDataSend(ConnectionClient client,Object data){
+        ChatMessage cm_signal=null;
+        byte[]      encrypted_byte_string=null;
+        String      encrypted_message=null;
+        
+        
         if(data instanceof Signal){
-            if(data instanceof ChatMessage){                
-                this.__encryptChatMessageSignal((ChatMessage)data);
-
+            if(data instanceof ChatMessage){     
+                cm_signal=(ChatMessage)data;
+                
+                /*
+                 *  Begin Note
+                 *    This had to be done to get around an error with the Java language.  Where the String(byte[]) constructor does not correctly convert all characters to their correct character representation.
+                 */
+                encrypted_byte_string=new byte[cm_signal.getChatMessage().length()];
+                for(int index=0;index<cm_signal.getChatMessage().length();index++){
+                    encrypted_byte_string[index]=(byte)cm_signal.getChatMessage().charAt(index);
+                }
+                
+                encrypted_byte_string=this.__encryptor.encryptData(cm_signal.getChatMessage().getBytes());
+                encrypted_message="";
+                for(byte b:encrypted_byte_string){
+                    encrypted_message+=(char)b;
+                }
+                /*
+                 * End Note
+                 */
+                
+                cm_signal.setChatMessage(encrypted_message);
                 return true;
             }
         }
@@ -254,14 +281,38 @@ public class ChatWindow extends RWindow implements DataSendListener,SignalReceiv
     }
     
     @Override public void onSignalReceived(ConnectionClient client,Signal signal){
+        ChatMessage cm_signal=null;
+        byte[]      decrypted_byte_string=null;
+        String      decrypted_message=null;
+        
+        
         if(signal instanceof ChatMessage){
-            if(!((ChatMessage) signal).getSenderUsername().equals(ServerWindow.SERVER_USERNAME)){  //If the message is coming from the server, it doesn't have to be unencrypted.
-                this.__decryptChatMessageSignal((ChatMessage)signal);
+            cm_signal=(ChatMessage)signal;
+            
+            if(!cm_signal.getSenderUsername().equals(ServerWindow.SERVER_USERNAME)){  //If the message is coming from the server, it doesn't have to be unencrypted.
+                /*
+                 *  Begin Note
+                 *    This had to be done to get around an error with the Java language.  Where the String(byte[]) constructor does not correctly convert all characters to their correct character representation.
+                 */
+                decrypted_byte_string=new byte[cm_signal.getChatMessage().length()];
+                for(int index=0;index<cm_signal.getChatMessage().length();index++){
+                    decrypted_byte_string[index]=(byte)cm_signal.getChatMessage().charAt(index);
+                }
                 
-                this.__regenerateEncryptionKey();
+                decrypted_byte_string=this.__encryptor.decryptData(decrypted_byte_string);
+                decrypted_message="";
+                for(byte b:decrypted_byte_string){
+                    decrypted_message+=(char)b;
+                }
+                /*
+                 * End Note
+                 */
+                
+                cm_signal.setChatMessage(decrypted_message);
+                this.__encryptor.regenerateEncryptionKey();
             }
             
-            this.getChatPanel().receiveMessage((ChatMessage)signal);
+            this.getChatPanel().receiveMessage(cm_signal);
         }
     }
     
@@ -282,61 +333,6 @@ public class ChatWindow extends RWindow implements DataSendListener,SignalReceiv
     /*End Getter Methods*/
     
     /*Begin Other Essential Methods*/
-    private final void __decryptChatMessageSignal(ChatMessage signal){
-        char   current_character=0x00;
-        String message=null;
-        int    message_index=0;
-        int    wrap_number=0;
-        
-        
-        message=signal.getChatMessage();
-        wrap_number=message.charAt(0);
-        message=message.substring(1,message.length());//Gotta get rid of the first wrap amount character.
-        message_index=message.length()-1;
-        
-        for(int counter=0;counter<wrap_number;counter++){
-            for(int encryption_key_index=this.__encryption_key.length()-1;encryption_key_index>-1;encryption_key_index--,message_index--){
-                current_character=message.charAt(message_index);
-                
-                current_character=(char)((int)current_character^(int)this.__encryption_key.charAt(encryption_key_index));
-                message=message.substring(0,message_index)+current_character+message.substring(message_index+1,message.length());  //This just replaces the character we modified.
-                
-                if(message_index==0){
-                    message_index=message.length();
-                }
-            }
-        }
-        
-        signal.setMessage(message);
-    }
-    
-    private final void __encryptChatMessageSignal(ChatMessage signal){
-        char    current_character=0x00;
-        String  encrypted_message=null;
-        int     wrap_count=1;
-        
-        
-        encrypted_message=signal.getChatMessage();            
-        for(int encryption_key_index=0,message_index=0;(encryption_key_index!=this.__encryption_key.length())||(message_index!=encrypted_message.length());encryption_key_index++,message_index++){
-            if(message_index==encrypted_message.length()){
-                message_index=0;
-            }
-            
-            if(encryption_key_index==this.__encryption_key.length()){
-                wrap_count++;
-                
-                encryption_key_index=0;
-            }
-            
-            current_character=encrypted_message.charAt(message_index);
-            
-            current_character=(char)((int)current_character^(int)this.__encryption_key.charAt(encryption_key_index));
-            encrypted_message=encrypted_message.substring(0,message_index)+current_character+encrypted_message.substring(message_index+1,encrypted_message.length());  //This just replaces the character we modified. 
-        }
-        
-        signal.setMessage((char)wrap_count+encrypted_message);
-    }
-    
     protected void _exportChat(File file){
         FileOutputStream output_stream=null;
         
@@ -352,56 +348,6 @@ public class ChatWindow extends RWindow implements DataSendListener,SignalReceiv
         }catch(IOException e){
             e.printStackTrace();
         }
-    }
-    
-    /**
-     * Changes the encryption key.
-     */
-    private final void __regenerateEncryptionKey(){
-        char convert_me[]=null;
-        long seed=0;
-        
-        
-        if(this.__encryption_key.length()>=16){
-            convert_me=this.__encryption_key.substring(0,16).toCharArray();
-        }else{
-            convert_me=this.__encryption_key.substring(0,this.__encryption_key.length()).toCharArray();
-        }
-        
-        for(int index=0;index<convert_me.length;index++){
-            seed+=convert_me[index]<<(index*8);
-        }
-        
-        this.__regenerateEncryptionKey(seed);
-    }
-    
-    /**
-     * Changes the encryption key, and seeds the number generator with the given parameter.
-     * 
-     * @param seed Seed for the random number generator.
-     */
-    private final void __regenerateEncryptionKey(long seed){        
-        int character=0;
-        List<Character> character_pool=null;
-        Random generator=null;
-        String new_encryption_key=null;
- 
-                
-        character_pool=new ArrayList<Character>();
-        generator=new Random(seed);
-            
-        for(int index=0;index<ChatWindow.ENCRYPTION_KEY_LENGTH;index++){
-            character_pool.add(new Character((char)generator.nextInt(256)));
-        }
-        
-        for(int chars_left=character_pool.size();chars_left>0;chars_left--){
-            character=Math.abs(generator.nextInt(character_pool.size()));
-            
-            new_encryption_key+=character_pool.get(character);
-            character_pool.remove(character);
-        }
-        
-        this.__encryption_key=new_encryption_key;
     }
     /*End Other Essential Methods*/
 }

@@ -95,7 +95,7 @@ public class ChatPanel extends JPanel{
              * 
              * @param message Chat message contents.
              */
-            public void setMessage(String message){
+            public void setChatMessage(String message){
                 if(message==null){
                     throw new NullPointerException();
                 }
